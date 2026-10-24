@@ -1,57 +1,65 @@
 # duplicate-finder
 
-Find **duplicate files by content hash** (SHA-256). Point it at a folder and it tells you which files are byte-identical and how much space the extras waste — without deleting anything on its own.
+Find duplicate files by content — not by name. Walk a folder, group files with
+identical SHA-256 hashes, and report each duplicate set with the space it wastes.
+Report-only: it never deletes or moves anything.
 
-**Why hash, not filename:** the same photo downloaded twice with different names is a duplicate; two files with the same name but different content are not. Only content comparison gets this right.
+## Why
 
-## What it does
+Same photo saved in three folders, video exports piling up, "final_v2_FINAL.mp4"
+everywhere. Name-based dedup tools miss renames; this one hashes the actual bytes.
 
-- Scans a directory **recursively**
-- Uses a fast **size pre-filter**, so only files sharing the same size get hashed (quick on big folders)
-- Reports each duplicate group: SHA-256, file size, and all copies
-- Optional: export the results as **JSON**, or **quarantine** extra copies into a review folder (`--move`) — originals are never deleted
+## Requirements
+
+- Python 3.8+ (standard library only — no installs)
 
 ## How to run
 
-Needs **Python 3.8+**. No dependencies — standard library only.
-
 ```bash
-python3 duplicate_finder.py /path/to/folder
-python3 duplicate_finder.py /path/to/folder --min-size 1048576
-python3 duplicate_finder.py /path/to/folder --json duplicates.json
-python3 duplicate_finder.py /path/to/folder --move ~/dupes-to-review
-python3 duplicate_finder.py /path/to/folder --extensions jpg,png,mp4
-```
+# scan a folder
+python3 dupfind.py ~/Downloads
 
-| Flag | What it does |
-|---|---|
-| `--min-size BYTES` | Skip files smaller than this (default `1`) |
-| `--json PATH` | Write duplicate groups to a JSON file |
-| `--move DIR` | Copy extra copies (keeping the first of each group) into `DIR` for manual review. Nothing is deleted. |
-| `--extensions exts` | Only scan these extensions, e.g. `jpg,png,mp4` |
+# ignore tiny files, only video extensions
+python3 dupfind.py ~/Videos --min-size 5MB --ext .mp4,.mov,.mkv
+
+# show only the 10 biggest duplicate groups
+python3 dupfind.py ~/Pictures --top 10
+```
 
 ## Example output
 
 ```
-Scanned 14 candidate files (120 total).
-Found 2 duplicate group(s), 2.1 MB reclaimable:
+[1] 3 copies x 248.6 MB = 497.2 MB wasted (sha256:9f2c41aa8b1e...)
+      /home/user/Videos/export_final.mp4
+      /home/user/Videos/export_final_v2.mp4
+      /home/user/Backups/export_final.mp4
+[2] 2 copies x 12.4 MB = 12.4 MB wasted (sha256:77bd02f1c9aa...)
+      /home/user/Pictures/beach.png
+      /home/user/Pictures/old/beach_copy.png
 
-[1] 1.1 MB each, 3 copies:
-    /photos/IMG_2041.jpg
-    /photos/downloads/IMG_2041.jpg
-    /photos/backup/IMG_2041 (1).jpg
-
-[2] 512.0 KB each, 2 copies:
-    /docs/report-final.pdf
-    /docs/report-final-copy.pdf
+2 duplicate groups, ~509.6 MB could be reclaimed.
 ```
+
+## How it works
+
+Two-pass scan keeps it fast on big folders:
+1. **Group by file size** (cheap) — files with unique sizes can't be duplicates.
+2. **Hash only the same-size files** with SHA-256 (1 MB chunks, low memory).
+
+## Options
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `folder` | — | Directory to scan (required) |
+| `--min-size` | `1B` | Skip smaller files (`1KB`, `5MB`, `2GB`) |
+| `--ext` | all | Only these extensions, e.g. `.mp4,.mov` |
+| `--top N` | all | Show only the N biggest groups |
 
 ## Safety notes
 
-- The tool is **read-only by default**: it only reads files to hash them.
-- `--move` copies the extra copies elsewhere; it never deletes or moves originals. Deleting is your call, after you review.
-- Files you can't read (permissions) are skipped, not crashed on.
+- Read-only: no `--delete` flag exists on purpose. Review the list, then delete
+  by hand (or move to trash) once you're sure.
+- Follows the files you can already read; skips unreadable ones silently.
+- Symlinks are hashed by target content like regular files.
 
----
-
-*Small tools that turn repeated annoyances into one-liners — part of a daily utility series.*
+MIT-licensed snippet — do whatever you want with it.
